@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Pedidos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 40px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; color: #f1f5f9; }
+    p.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 32px; }
+    label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: #6366f1; }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled { background: #334155; cursor: not-allowed; }
+    .result {
+      margin-top: 24px;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .result.success {
+      background: #064e3b;
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+      display: block;
+    }
+    .result.error {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      display: block;
+    }
+    .pipeline {
+      margin-top: 24px;
+      display: none;
+    }
+    .pipeline.visible { display: block; }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #1e293b;
+      font-size: 0.88rem;
+      color: #94a3b8;
+      transition: color 0.3s;
+    }
+    .step.active { color: #e2e8f0; }
+    .step.done { color: #10b981; }
+    .step.failed { color: #ef4444; }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #334155;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .step.active .dot { background: #6366f1; animation: pulse 1s infinite; }
+    .step.done .dot { background: #10b981; }
+    .step.failed .dot { background: #ef4444; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .order-id {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 8px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛡️ Sistema de Pedidos</h1>
+    <p class="subtitle">Arquitetura serverless event-driven na AWS</p>
+
+    <div>
+      <label>Nome do cliente</label>
+      <input type="text" id="cliente" placeholder="Ex: Lucas" />
+
+      <label>Produto</label>
+      <select id="produto">
+        <option value="espada">⚔️ Espada (10 em estoque)</option>
+        <option value="escudo">🛡️ Escudo (5 em estoque)</option>
+        <option value="pocao">🧪 Poção (50 em estoque)</option>
+        <option value="arco">🏹 Arco (3 em estoque)</option>
+        <option value="dragao">🐉 Dragão (não existe)</option>
+      </select>
+
+      <label>Quantidade</label>
+      <input type="number" id="quantidade" value="1" min="1" max="99" />
+
+      <button id="btn" onclick="enviarPedido()">Fazer Pedido</button>
+    </div>
+
+    <div id="result" class="result"></div>
+
+    <div id="pipeline" class="pipeline">
+      <div class="step" id="step-entry">
+        <div class="dot"></div> Pedido recebido pela API
+      </div>
+      <div class="step" id="step-reserve">
+        <div class="dot"></div> Reservando estoque
+      </div>
+      <div class="step" id="step-payment">
+        <div class="dot"></div> Processando pagamento
+      </div>
+      <div class="step" id="step-ship">
+        <div class="dot"></div> Despachando pedido
+      </div>
+    </div>
+
+    <div id="order-id" class="order-id"></div>
+  </div>
+
+  <script>
+    // Substitua pela URL da sua Function URL do order-entry
+    const API_URL = "https://uel7pk5w4bz2ruby6amx3ija6e0hzpsa.lambda-url.us-east-1.on.aws/";
+
+    async function enviarPedido() {
+      const cliente = document.getElementById("cliente").value.trim();
+      const produto = document.getElementById("produto").value;
+      const quantidade = parseInt(document.getElementById("quantidade").value);
+
+      if (!cliente) {
+        mostrarResultado("Por favor, informe o nome do cliente.", false);
+        return;
+      }
+
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      btn.textContent = "Enviando...";
+
+      resetPipeline();
+
+      try {
+        setStep("step-entry", "active");
+
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cliente, produto, quantidade })
+        });
+
+        const data = await resp.json();
+
+        if (resp.status === 202) {
+          setStep("step-entry", "done");
+          document.getElementById("order-id").textContent =
+            `Order ID: ${data.order_id}`;
+
+          // Simula visualmente o progresso do pipeline
+          await delay(800);
+          setStep("step-reserve", "active");
+          await delay(600);
+          setStep("step-reserve", "done");
+
+          await delay(800);
+          setStep("step-payment", "active");
+          await delay(1200);
+          setStep("step-payment", "done");
+
+          await delay(600);
+          setStep("step-ship", "active");
+          await delay(800);
+          setStep("step-ship", "done");
+
+          mostrarResultado(
+            `✅ Pedido enviado com sucesso!\n${data.mensagem}`,
+            true
+          );
+        } else {
+          setStep("step-entry", "failed");
+          mostrarResultado(`❌ Erro: ${data.erro || "Erro desconhecido"}`, false);
+        }
+      } catch (err) {
+        mostrarResultado(`❌ Erro de conexão: ${err.message}`, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Fazer Pedido";
+        document.getElementById("pipeline").classList.add("visible");
+      }
+    }
+
+    function mostrarResultado(mensagem, sucesso) {
+      const el = document.getElementById("result");
+      el.textContent = mensagem;
+      el.className = `result ${sucesso ? "success" : "error"}`;
+    }
+
+    function setStep(id, estado) {
+      const el = document.getElementById(id);
+      el.className = `step ${estado}`;
+    }
+
+    function resetPipeline() {
+      ["step-entry","step-reserve","step-payment","step-ship"]
+        .forEach(id => setStep(id, ""));
+      document.getElementById("pipeline").classList.remove("visible");
+      document.getElementById("order-id").textContent = "";
+      document.getElementById("result").className = "result";
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+  </script>
+</body>
+</html>

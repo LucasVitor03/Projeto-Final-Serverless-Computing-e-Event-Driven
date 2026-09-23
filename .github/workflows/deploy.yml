@@ -1,0 +1,100 @@
+name: Deploy Projeto Final
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - 'frontend/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Package and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install dependencies
+        run: pip install -r functions/requirements.txt -t functions/
+
+      - name: Deploy order-entry
+        run: |
+          cd functions
+          zip -r order_entry.zip . -x "*.pyc" -x "__pycache__/*" -x "*.zip"
+          aws lambda update-function-code \
+            --function-name order-pipeline-final-order-entry \
+            --zip-file fileb://order_entry.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy reserve-stock
+        run: |
+          cd functions
+          zip -r reserve_stock.zip . -x "*.pyc" -x "__pycache__/*" -x "*.zip"
+          aws lambda update-function-code \
+            --function-name order-pipeline-final-reserve-stock \
+            --zip-file fileb://reserve_stock.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy charge-payment
+        run: |
+          cd functions
+          zip -r charge_payment.zip . -x "*.pyc" -x "__pycache__/*" -x "*.zip"
+          aws lambda update-function-code \
+            --function-name order-pipeline-final-charge-payment \
+            --zip-file fileb://charge_payment.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy ship-order
+        run: |
+          cd functions
+          zip -r ship_order.zip . -x "*.pyc" -x "__pycache__/*" -x "*.zip"
+          aws lambda update-function-code \
+            --function-name order-pipeline-final-ship-order \
+            --zip-file fileb://ship_order.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy ai-analyzer
+        run: |
+          cd functions
+          zip -r ai_analyzer.zip . -x "*.pyc" -x "__pycache__/*" -x "*.zip"
+          aws lambda update-function-code \
+            --function-name order-pipeline-final-ai-analyzer \
+            --zip-file fileb://ai_analyzer.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 cp frontend/index.html \
+            s3://order-pipeline-final-frontend-537388953805/index.html \
+            --content-type "text/html" \
+            --region ${{ secrets.AWS_REGION }}
+          echo "Frontend deployado com sucesso"
+
+      - name: Verify deployments
+        run: |
+          for fn in order-entry reserve-stock charge-payment ship-order ai-analyzer; do
+            STATE=$(aws lambda get-function \
+              --function-name order-pipeline-final-$fn \
+              --query "Configuration.State" \
+              --output text \
+              --region ${{ secrets.AWS_REGION }})
+            echo "order-pipeline-final-$fn: $STATE"
+          done

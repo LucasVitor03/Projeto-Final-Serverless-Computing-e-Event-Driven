@@ -1,0 +1,76 @@
+{
+    "Comment": "Pipeline de pedidos com AIOps",
+    "StartAt": "ReservarEstoque",
+    "States": {
+        "ReservarEstoque": {
+            "Type": "Task",
+            "Resource": "${reserve_stock_arn}",
+            "Next": "CobrarPagamento",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "PedidoFalhou",
+                    "ResultPath": "$.erro"
+                }
+            ]
+        },
+        "CobrarPagamento": {
+            "Type": "Task",
+            "Resource": "${charge_payment_arn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2,
+                    "JitterStrategy": "FULL"
+                }
+            ],
+            "Next": "DespacharPedido",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "PedidoFalhou",
+                    "ResultPath": "$.erro"
+                }
+            ]
+        },
+        "DespacharPedido": {
+            "Type": "Task",
+            "Resource": "${ship_order_arn}",
+            "Next": "PedidoConcluido",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "PedidoFalhou",
+                    "ResultPath": "$.erro"
+                }
+            ]
+        },
+        "PedidoConcluido": {
+            "Type": "Succeed"
+        },
+        "PedidoFalhou": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sqs:sendMessage",
+            "Parameters": {
+                "QueueUrl": "${dlq_url}",
+                "MessageBody.$": "States.JsonToString($)"
+            },
+            "Next": "PedidoEncerradoComErro"
+        },
+        "PedidoEncerradoComErro": {
+            "Type": "Fail",
+            "Error": "PipelineFalhou",
+            "Cause": "Pedido encaminhado para DLQ"
+        }
+    }
+}
