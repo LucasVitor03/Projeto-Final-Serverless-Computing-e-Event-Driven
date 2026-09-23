@@ -125,21 +125,23 @@ Com base nessas evidências, forneça:
 Seja objetivo e técnico. Máximo de 200 palavras.
 """
 
-        # Chama o Bedrock com o modelo Claude
+        # Chama o Bedrock com o modelo Amazon Titan
         try:
             resposta = bedrock.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                modelId="amazon.titan-text-express-v1",
                 body=json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 500,
-                    "messages": [{"role": "user", "content": contexto}]
+                    "inputText": contexto,
+                    "textGenerationConfig": {
+                        "maxTokenCount": 500,
+                        "temperature": 0.3
+                    }
                 }),
                 contentType="application/json",
                 accept="application/json"
             )
 
             resultado = json.loads(resposta["body"].read())
-            analise = resultado["content"][0]["text"]
+            analise = resultado["results"][0]["outputText"]
 
             log("INFO", "Análise AIOps concluída",
                 order_id=order_id,
