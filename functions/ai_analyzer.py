@@ -125,23 +125,27 @@ Com base nessas evidências, forneça:
 Seja objetivo e técnico. Máximo de 200 palavras.
 """
 
-        # Chama o Bedrock com o modelo Amazon Titan
+        # Chama o Bedrock com o modelo OpenAI
         try:
-            resposta = bedrock.invoke_model(
-                modelId="amazon.titan-text-express-v1",
-                body=json.dumps({
-                    "inputText": contexto,
-                    "textGenerationConfig": {
-                        "maxTokenCount": 500,
-                        "temperature": 0.3
+            # Usa a Converse API — compatível com modelos OpenAI no Bedrock
+            # e usa IAM auth nativamente, sem chaves adicionais
+            bedrock_converse = boto3.client("bedrock-runtime", region_name="us-east-1")
+
+            resposta = bedrock_converse.converse(
+                modelId="us.openai.gpt-5.6-sol",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [{"text": contexto}]
                     }
-                }),
-                contentType="application/json",
-                accept="application/json"
+                ],
+                inferenceConfig={
+                    "maxTokens": 500,
+                    "temperature": 0.3
+                }
             )
 
-            resultado = json.loads(resposta["body"].read())
-            analise = resultado["results"][0]["outputText"]
+            analise = resposta["output"]["message"]["content"][0]["text"]
 
             log("INFO", "Análise AIOps concluída",
                 order_id=order_id,
