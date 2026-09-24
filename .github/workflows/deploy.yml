@@ -82,6 +82,7 @@ jobs:
 
       - name: Deploy frontend to S3
         run: |
+          sed -i 's|FUNCTION_URL_PLACEHOLDER|${{ secrets.API_URL }}|g' frontend/index.html
           aws s3 cp frontend/index.html \
             s3://order-pipeline-final-frontend-537388953805/index.html \
             --content-type "text/html" \
