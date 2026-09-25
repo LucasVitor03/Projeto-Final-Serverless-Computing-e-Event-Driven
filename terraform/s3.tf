@@ -1,6 +1,7 @@
 # Bucket para o frontend estático
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.project_name}-frontend-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 data "aws_caller_identity" "current" {}
@@ -44,11 +45,12 @@ resource "null_resource" "frontend_deploy" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
+    interpreter = ["C:/Program Files/Git/usr/bin/bash.exe", "-c"]
+    command     = <<-EOT
       sed -i 's|FUNCTION_URL_PLACEHOLDER|${aws_lambda_function_url.order_entry.function_url}|g' ../frontend/index.html
       sed -i 's|https://[a-z0-9]*\.lambda-url\.us-east-1\.on\.aws/|${aws_lambda_function_url.order_entry.function_url}|g' ../frontend/index.html
       aws s3 cp ../frontend/index.html s3://${aws_s3_bucket.frontend.bucket}/index.html --content-type "text/html" --region us-east-1
-      echo "Frontend deployado automaticamente com URL: ${aws_lambda_function_url.order_entry.function_url}"
+      echo "Frontend deployado com URL: ${aws_lambda_function_url.order_entry.function_url}"
     EOT
   }
 
