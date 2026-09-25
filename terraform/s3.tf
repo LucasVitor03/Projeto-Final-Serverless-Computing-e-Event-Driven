@@ -34,3 +34,26 @@ resource "aws_s3_bucket_policy" "frontend" {
     }]
   })
 }
+
+# Atualiza a URL no index.html e faz upload para o S3
+# automaticamente após cada terraform apply
+resource "null_resource" "frontend_deploy" {
+  triggers = {
+    # Roda novamente sempre que a Function URL mudar
+    api_url = aws_lambda_function_url.order_entry.function_url
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      sed -i 's|FUNCTION_URL_PLACEHOLDER|${aws_lambda_function_url.order_entry.function_url}|g' ../frontend/index.html
+      sed -i 's|https://[a-z0-9]*\.lambda-url\.us-east-1\.on\.aws/|${aws_lambda_function_url.order_entry.function_url}|g' ../frontend/index.html
+      aws s3 cp ../frontend/index.html s3://${aws_s3_bucket.frontend.bucket}/index.html --content-type "text/html" --region us-east-1
+      echo "Frontend deployado automaticamente com URL: ${aws_lambda_function_url.order_entry.function_url}"
+    EOT
+  }
+
+  depends_on = [
+    aws_s3_bucket_policy.frontend,
+    aws_lambda_function_url.order_entry
+  ]
+}
